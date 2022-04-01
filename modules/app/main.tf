@@ -135,6 +135,16 @@ module "asg_sg" {
   ]
 }
 
+resource "tls_private_key" "private_pem_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "generated_key" {
+  key_name   = "pem-key"
+  public_key = tls_private_key.private_pem_key.public_key_openssh
+}
+
 resource "aws_vpc_endpoint" "s3_endpoint" {
   vpc_endpoint_type = "Gateway"
   vpc_id            = module.vpc.vpc_id
@@ -235,7 +245,7 @@ resource "aws_instance" "bastion" {
   subnet_id       = module.vpc.public_subnets[0]
   # user_data       = file("./scripts/bastion.sh")
   user_data = templatefile("scripts/bastion.sh.tftpl", { ssh_public = var.public_key })
-  key_name  = "AWS-Task-keypair1"
+  key_name  = aws_key_pair.generated_key.key_name
 
   tags = {
     Name = "${var.name}-bastion"
@@ -250,7 +260,7 @@ resource "aws_launch_configuration" "as_conf" {
   associate_public_ip_address = false
   security_groups             = [module.asg_sg.security_group_id]
   iam_instance_profile        = aws_iam_instance_profile.terraform_asg.id
-  key_name                    = "AWS-Task-keypair1"
+  key_name                    = aws_key_pair.generated_key.key_name
 
   lifecycle {
     create_before_destroy = true

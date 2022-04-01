@@ -46,6 +46,10 @@ variable "upload_directory" {
   default = "php-mysql-crud/"
 }
 
+# variable "pem-key" {
+#     type = string
+# }
+
 variable "name" {}
 variable "instance_type" {}
 variable "add_volume_size" {}
