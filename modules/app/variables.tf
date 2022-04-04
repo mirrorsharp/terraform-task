@@ -1,3 +1,4 @@
+#VPC variables
 variable "vpc_name" {
   description = "Name of VPC"
   type        = string
@@ -42,14 +43,12 @@ variable "vpc_tags" {
   }
 }
 
+#PHP application upload directory
 variable "upload_directory" {
   default = "php-mysql-crud/"
 }
 
-# variable "pem-key" {
-#     type = string
-# }
-
+#Input variables
 variable "name" {}
 variable "instance_type" {}
 variable "add_volume_size" {}

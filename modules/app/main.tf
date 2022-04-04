@@ -1,3 +1,4 @@
+#VPC, private and public subnets, nat gateway for private subnets.
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "2.21.0"
@@ -21,6 +22,7 @@ module "vpc" {
   }
 }
 
+#Security group for load balancer
 module "load_balancer_sg" {
   source      = "terraform-aws-modules/security-group/aws"
   version     = "4.9.0"
@@ -54,6 +56,7 @@ module "load_balancer_sg" {
   ]
 }
 
+#Security group for RDS
 module "db_sg" {
   source      = "terraform-aws-modules/security-group/aws"
   version     = "4.9.0"
@@ -80,6 +83,7 @@ module "db_sg" {
   ]
 }
 
+#Security group for bastion host
 module "bastion_sg" {
   source      = "terraform-aws-modules/security-group/aws"
   version     = "4.9.0"
@@ -103,6 +107,7 @@ module "bastion_sg" {
   ]
 }
 
+#Security group for ASG
 module "asg_sg" {
   source      = "terraform-aws-modules/security-group/aws"
   version     = "4.9.0"
@@ -135,6 +140,7 @@ module "asg_sg" {
   ]
 }
 
+#Private .pem key for instances
 resource "tls_private_key" "private_pem_key" {
   algorithm = "RSA"
   rsa_bits  = 4096
@@ -145,6 +151,7 @@ resource "aws_key_pair" "generated_key" {
   public_key = tls_private_key.private_pem_key.public_key_openssh
 }
 
+#S3 endpoint
 resource "aws_vpc_endpoint" "s3_endpoint" {
   vpc_endpoint_type = "Gateway"
   vpc_id            = module.vpc.vpc_id
@@ -157,6 +164,7 @@ resource "aws_vpc_endpoint" "s3_endpoint" {
   }
 }
 
+#Subnet group for RDS
 resource "aws_db_subnet_group" "terraform_db_group" {
   name       = "terraform_db_group"
   subnet_ids = [module.vpc.private_subnets[0], module.vpc.private_subnets[1]]
@@ -166,12 +174,12 @@ resource "aws_db_subnet_group" "terraform_db_group" {
   }
 }
 
+#RDS instance
 resource "aws_db_instance" "terraform_db" {
   allocated_storage = 20
   engine            = "mysql"
   engine_version    = "8.0"
   instance_class    = "db.t2.micro"
-  # db_name             = "php_mysql_crud"
   username            = "root"
   password            = "pas12345"
   skip_final_snapshot = true
@@ -181,37 +189,34 @@ resource "aws_db_instance" "terraform_db" {
   vpc_security_group_ids = [module.db_sg.security_group_id]
 }
 
-# output "rds_endpoint" {
-#   value = "${aws_db_instance.terraform_db.endpoint}"
-# }
-
+#Adding A record for Route53
 resource "aws_route53_record" "a_record" {
   zone_id = "Z04511612EYQ57NS0T4FI"
   name    = "iangodbx.pp.ua"
-  # name    = var.name 
   type    = "A"
-  #поменять name 
+  #change name 
   alias {
     name                   = aws_lb.alb.dns_name
     zone_id                = aws_lb.alb.zone_id
     evaluate_target_health = true
   }
-  # depends_on = [
-  #   aws_lb.alb
-  # ]
 }
 
+#S3 bucket with PHP application
 resource "aws_s3_bucket" "php_crud" {
   bucket = "${var.name}-s3-bucket-23681531"
   tags = {
     Name = "${var.name}-s3-bucket-23681531"
   }
 }
+
+#Make S3 bucket private
 resource "aws_s3_bucket_acl" "example" {
   bucket = aws_s3_bucket.php_crud.id
   acl    = "private"
 }
 
+#Upload PHP application files to S3 bucket
 resource "aws_s3_object" "php_crud" {
   for_each = fileset(var.upload_directory, "**/*.*")
   bucket   = aws_s3_bucket.php_crud.id
@@ -224,6 +229,7 @@ resource "aws_s3_object" "php_crud" {
   ]
 }
 
+#Choose AMI for instances 
 data "aws_ami" "amazon-linux-2" {
   most_recent = true
   owners      = ["137112412989"]
@@ -238,12 +244,12 @@ data "aws_ami" "amazon-linux-2" {
   }
 }
 
+#Bastion host
 resource "aws_instance" "bastion" {
   ami             = data.aws_ami.amazon-linux-2.id
   instance_type   = var.instance_type
   security_groups = [module.bastion_sg.security_group_id]
   subnet_id       = module.vpc.public_subnets[0]
-  # user_data       = file("./scripts/bastion.sh")
   user_data = templatefile("scripts/bastion.sh.tftpl", { ssh_public = var.public_key })
   key_name  = aws_key_pair.generated_key.key_name
 
@@ -252,6 +258,7 @@ resource "aws_instance" "bastion" {
   }
 }
 
+#Launch configuration for ASG
 resource "aws_launch_configuration" "as_conf" {
   name_prefix                 = "${var.name}-lc-"
   image_id                    = data.aws_ami.amazon-linux-2.id
@@ -276,7 +283,7 @@ resource "aws_launch_configuration" "as_conf" {
   ]
 }
 
-#additional volume 
+#Additional volume 
 resource "aws_volume_attachment" "ebs_att_bastion" {
   device_name = "/dev/sdh"
   volume_id   = aws_ebs_volume.add_volume_bastion.id
@@ -288,17 +295,7 @@ resource "aws_ebs_volume" "add_volume_bastion" {
   size              = var.add_volume_size
 }
 
-# resource "aws_volume_attachment" "ebs_att_asg" {
-#   device_name = "/dev/sdh"
-#   volume_id   = aws_ebs_volume.add_volume_bastion.id
-#   instance_id = aws_instance.bastion.id
-# }
-
-# resource "aws_ebs_volume" "add_volume_asg" {
-#   availability_zone = "us-east-1a"
-#   size              = var.add_volume_size
-# }
-
+#IAM roles for ASG
 resource "aws_iam_instance_profile" "terraform_asg" {
   name = "S3RDS"
   role = aws_iam_role.asg_php_access.name
@@ -335,6 +332,7 @@ resource "aws_iam_role_policy_attachment" "role-policy-attachment" {
   policy_arn = each.value
 }
 
+#ASG
 resource "aws_autoscaling_group" "lb_asg" {
   name                 = "${var.name}-asg"
   launch_configuration = aws_launch_configuration.as_conf.name
@@ -354,6 +352,7 @@ resource "aws_autoscaling_group" "lb_asg" {
   }
 }
 
+#Targer group for ASG
 resource "aws_lb_target_group" "https_tg" {
   name     = "tf-example-lb-tg"
   port     = 443
@@ -361,6 +360,7 @@ resource "aws_lb_target_group" "https_tg" {
   vpc_id   = module.vpc.vpc_id
 }
 
+#Application load balancer
 resource "aws_lb" "alb" {
   name               = "${var.name}-alb"
   internal           = false
@@ -373,6 +373,7 @@ resource "aws_lb" "alb" {
   }
 }
 
+#Redirect to HTTPS application load balancer listener
 resource "aws_lb_listener" "redirect_https" {
   load_balancer_arn = aws_lb.alb.arn
   port              = "80"
@@ -389,6 +390,7 @@ resource "aws_lb_listener" "redirect_https" {
   }
 }
 
+#Forward to the targer group application load balancer listener
 resource "aws_lb_listener" "https_tg" {
   load_balancer_arn = aws_lb.alb.arn
   port              = "443"
@@ -401,14 +403,3 @@ resource "aws_lb_listener" "https_tg" {
     target_group_arn = aws_lb_target_group.https_tg.arn
   }
 }
-
-
-
-# │ Error: AccessDenied: User: arn:aws:iam::120450333118:user/Terraform is not authorized to access this resource
-# │       status code: 403, request id: bb431355-118d-4298-8307-337221704db3
-# │
-# │   with module.app_module.aws_route53_record.a_record,
-# │   on modules/app/main.tf line 178, in resource "aws_route53_record" "a_record":
-# │  178: resource "aws_route53_record" "a_record" {
-# │
-# ╵

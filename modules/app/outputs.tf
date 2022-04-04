@@ -1,3 +1,4 @@
+#Get ASG instances ids
 data "aws_instances" "i_id" {
 
   filter {

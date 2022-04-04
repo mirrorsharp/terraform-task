@@ -1,5 +1,6 @@
 terraform {
   required_providers {
+    #Required dependency
     random = {
       source  = "hashicorp/random"
       version = "3.1.0"
@@ -19,6 +20,7 @@ provider "aws" {
   region = local.region
 }
 
+#Main module
 module "app_module" {
   source          = "./modules/app"
   name            = "mykyta"
