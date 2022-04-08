@@ -35,10 +35,7 @@ CREATE TABLE task(
 EOF
 export ENDPOINT=`aws rds --output=text --region us-east-1 describe-db-instances --query "DBInstances[*].Endpoint.Address"`
 export MYSQL_PWD=pas12345
-# DB_ENDPOINT=`aws rds --output=text --region us-east-1 describe-db-instances --query "DBInstances[*].Endpoint.Address"`
 mysql -h $ENDPOINT -u root < script.sql
-
-# export ENDPOINT=`aws rds --output=text --region us-east-1 describe-db-instances --query "DBInstances[*].Endpoint.Address"`
 
 cat <<EOF > dbinfo.inc
 <?php
